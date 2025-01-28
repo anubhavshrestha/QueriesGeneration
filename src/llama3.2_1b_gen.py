@@ -89,6 +89,11 @@ import time
 import os
 import argparse
 import json
+import sys
+from functools import partial
+
+# Make all print statements flush immediately
+print = partial(print, flush=True)
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -117,8 +122,8 @@ def process_tsv_and_generate(input_file, output_dir):
     queries_file = os.path.join(output_dir, "queries.jsonl")
     
     with open(input_file, 'r', encoding='utf-8') as f, \
-         open(full_output_file, 'w', encoding='utf-8') as out_f, \
-         open(queries_file, 'w', encoding='utf-8') as jsonl_f:
+         open(full_output_file, 'w', encoding='utf-8', buffering=1) as out_f, \
+         open(queries_file, 'w', encoding='utf-8', buffering=1) as jsonl_f:
         
         while True:
             line = f.readline().strip()
@@ -153,7 +158,7 @@ def process_tsv_and_generate(input_file, output_dir):
                 num_return_sequences=80,
                 temperature=0.9, 
                 top_k=100,
-                top_p = 0.95,
+                top_p=0.95,
                 do_sample=True,
                 use_cache=True,
                 pad_token_id=tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id,
@@ -164,8 +169,13 @@ def process_tsv_and_generate(input_file, output_dir):
             # Write full output to text file
             for j, result in enumerate(results, 1):
                 out_f.write(f"Output {j}:\n{result}\n{'-' * 50}\n")
+                out_f.flush()
+                os.fsync(out_f.fileno())  # Force write to disk
+            
             out_f.write(f"\nExecution time: {time.time() - start_time:.2f} seconds\n")
             out_f.write("=" * 100 + "\n")  # Separator between documents
+            out_f.flush()
+            os.fsync(out_f.fileno())
             
             # Extract queries and save to JSONL
             queries = []
@@ -195,8 +205,13 @@ def process_tsv_and_generate(input_file, output_dir):
             }
             json.dump(jsonl_entry, jsonl_f)
             jsonl_f.write('\n')
+            jsonl_f.flush()
+            os.fsync(jsonl_f.fileno())  # Force write to disk
             
             print(f"Processed document {doc_id} ({i+1} documents processed)")
+            print(f"Current full_outputs position: {out_f.tell()}")
+            print(f"Current JSONL position: {jsonl_f.tell()}")
+            sys.stdout.flush()
             
             if i % 10 == 0:
                 torch.cuda.empty_cache()
