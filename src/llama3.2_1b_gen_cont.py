@@ -1,3 +1,4 @@
+
 from unsloth import FastLanguageModel
 import torch
 import time
@@ -33,6 +34,15 @@ def process_tsv_and_generate(input_file, output_dir, start_id):
     i = 0
     
     queries_file = os.path.join(output_dir, "queries.jsonl")
+
+    with open(input_file, 'r', encoding='utf-8') as f:
+        first_line = f.readline().strip()
+        try:
+            first_doc_id = int(first_line.split('\t', 1)[0])
+            i = first_doc_id  # Set initial i to the first doc_id
+        except (ValueError, IndexError):
+            print(f"Error reading first line for doc_id")
+            return
     
     # Verify the last document ID in existing JSONL file
     if start_id > 0 and os.path.exists(queries_file):
