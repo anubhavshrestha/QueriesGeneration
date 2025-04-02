@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse
 import os
 import torch
@@ -21,19 +22,19 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Fine-tune Llama model for document-to-query generation")
     
     # Model parameters
-    parser.add_argument("--model_name", type=str, default="meta-llama/Llama-3.2-1B-Instruct",
-                      help="Model to fine-tune (default: meta-llama/Llama-3.2-1B)")
+    parser.add_argument("--model_name", type=str, default="meta-llama/Llama-3.2-3B-Instruct",
+                      help="Model to fine-tune (default: meta-llama/Llama-3.2-3B-Instruct)")
     parser.add_argument("--data_path", type=str, required=True,
                       help="Path to training data file (.tsv/.jsonl)")
-    parser.add_argument("--output_dir", type=str, default="doc2query-llama-3.2-base",
+    parser.add_argument("--output_dir", type=str, default="doc2query-llama-3.2",
                       help="Output directory for the fine-tuned model")
     
     # LoRA parameters
-    parser.add_argument("--lora_r", type=int, default=64,
+    parser.add_argument("--lora_r", type=int, default=32,
                       help="Rank of LoRA update matrices (default: 32)")
-    parser.add_argument("--lora_alpha", type=int, default=64,
+    parser.add_argument("--lora_alpha", type=int, default=32,
                       help="LoRA alpha scaling parameter (default: 32)")
-    parser.add_argument("--lora_dropout", type=float, default=0.1,
+    parser.add_argument("--lora_dropout", type=float, default=0.05,
                       help="LoRA dropout probability (default: 0.05)")
     
     # Training parameters
@@ -43,7 +44,7 @@ def parse_args():
                       help="Gradient accumulation steps (default: 8)")
     parser.add_argument("--num_epochs", type=float, default=1,
                       help="Number of training epochs (default: 1)")
-    parser.add_argument("--learning_rate", type=float, default=2e-4,
+    parser.add_argument("--learning_rate", type=float, default=1.5e-4,
                       help="Learning rate (default: 1.5e-4)")
     parser.add_argument("--weight_decay", type=float, default=0.001,
                       help="Weight decay (default: 0.001)")
@@ -62,7 +63,7 @@ def parse_args():
                       help="Use 4-bit quantization")
     parser.add_argument("--use_bf16", action="store_true", default=True,
                       help="Use bfloat16 precision if available")
-    parser.add_argument("--save_steps", type=int, default=1000,
+    parser.add_argument("--save_steps", type=int, default=500,
                       help="Save checkpoint every X steps (default: 500)")
     parser.add_argument("--logging_steps", type=int, default=50,
                       help="Log every X steps (default: 50)")
@@ -123,11 +124,12 @@ def main():
         sample_query = dataset[0]["query"]
         logger.info(f"Document: {sample_doc[:100]}...")
         logger.info(f"Query: {sample_query}")
-
+    
+    # Format dataset
     def tokenize_function(examples):
-        # Create formatted prompts with instruction tokens
-        prompts = [f"[INST] Predict possible search queries for the following document:\n{doc} [/INST] {query}" 
-                for doc, query in zip(examples["document"], examples["query"])]
+        # Create formatted prompts
+        prompts = [f"[INST] Generate a search query for this document: {doc} [/INST] {query}" 
+                  for doc, query in zip(examples["document"], examples["query"])]
         
         # Ensure proper truncation to prevent indexing errors
         tokenized = tokenizer(
@@ -196,7 +198,7 @@ def main():
         warmup_ratio=args.warmup_ratio,
         lr_scheduler_type=args.lr_scheduler,
         save_steps=args.save_steps,
-        save_total_limit=20,
+        save_total_limit=3,
         logging_steps=args.logging_steps,
         bf16=bf16,
         fp16=not bf16 and torch.cuda.is_available(),
